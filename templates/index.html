@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive AI Storytelling</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Georgia, serif;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      background: #faf8f5;
+      color: #1a1a1a;
+      line-height: 1.6;
+    }
+    h1 { font-size: 1.5rem; margin-top: 0; }
+    .step { margin-bottom: 1.5rem; }
+    label { display: block; margin-bottom: 0.25rem; font-weight: 600; }
+    select, input[type="text"], textarea {
+      width: 100%;
+      padding: 0.5rem;
+      font: inherit;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    button {
+      padding: 0.5rem 1rem;
+      font: inherit;
+      cursor: pointer;
+      background: #2c5f2d;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      margin-top: 0.5rem;
+    }
+    button:hover { background: #1e4620; }
+    button.secondary { background: #555; }
+    button.secondary:hover { background: #333; }
+    #story {
+      white-space: pre-wrap;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      padding: 1rem;
+      min-height: 120px;
+      margin: 0.5rem 0;
+    }
+    .error { color: #b00; margin-top: 0.5rem; white-space: pre-wrap; }
+    .hidden { display: none; }
+    #otherTheme { margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <h1>Interactive AI Storytelling</h1>
+  <p>Choose a theme, get a character suggestion, then set the scene and act.</p>
+
+  <div class="step" id="stepTheme">
+    <label for="theme">Theme / Genre</label>
+    <select id="theme">
+      <option value="fantasy">Fantasy</option>
+      <option value="science fiction">Science Fiction</option>
+      <option value="mystery">Mystery</option>
+      <option value="adventure">Adventure</option>
+      <option value="other">Other</option>
+    </select>
+    <div id="otherTheme" class="hidden">
+      <label for="themeOther">Describe your theme</label>
+      <input type="text" id="themeOther" placeholder="e.g. post-apocalyptic">
+    </div>
+    <button type="button" id="btnSuggest">Suggest character</button>
+    <p id="themeError" class="error hidden"></p>
+  </div>
+
+  <div class="step hidden" id="stepCharacter">
+    <label for="charName">Character name</label>
+    <input type="text" id="charName" placeholder="Name">
+    <label for="charPersonality">Personality</label>
+    <textarea id="charPersonality" placeholder="One sentence personality"></textarea>
+    <p>Change anything you like, then start the story.</p>
+    <button type="button" id="btnStart">Confirm & start story</button>
+    <p id="charError" class="error hidden"></p>
+  </div>
+
+  <div class="step hidden" id="stepStory">
+    <label>Story</label>
+    <div id="story"></div>
+    <label for="action">Your action</label>
+    <input type="text" id="action" placeholder="e.g. investigate the noise">
+    <button type="button" id="btnAction">Submit action</button>
+    <button type="button" id="btnNewGame" class="secondary">New game</button>
+    <p id="storyError" class="error hidden"></p>
+  </div>
+
+  <script>
+    const themeSelect = document.getElementById('theme');
+    const otherThemeDiv = document.getElementById('otherTheme');
+    const themeOther = document.getElementById('themeOther');
+    const btnSuggest = document.getElementById('btnSuggest');
+    const stepCharacter = document.getElementById('stepCharacter');
+    const charName = document.getElementById('charName');
+    const charPersonality = document.getElementById('charPersonality');
+    const btnStart = document.getElementById('btnStart');
+    const stepStory = document.getElementById('stepStory');
+    const storyEl = document.getElementById('story');
+    const actionInput = document.getElementById('action');
+    const btnAction = document.getElementById('btnAction');
+    const btnNewGame = document.getElementById('btnNewGame');
+    const themeError = document.getElementById('themeError');
+    const charError = document.getElementById('charError');
+    const storyError = document.getElementById('storyError');
+
+    let state = {
+      theme: 'adventure',
+      characterName: '',
+      characterPersonality: '',
+      storySoFar: ''
+    };
+
+    themeSelect.addEventListener('change', () => {
+      otherThemeDiv.classList.toggle('hidden', themeSelect.value !== 'other');
+    });
+
+    function getTheme() {
+      const v = themeSelect.value;
+      return v === 'other' ? (themeOther.value.trim() || 'adventure') : v;
+    }
+
+    function showError(el, msg) {
+      el.textContent = msg || '';
+      el.classList.toggle('hidden', !msg);
+    }
+
+    function errorMessage(data) {
+      const main = data.error || 'Something went wrong.';
+      const detail = data.detail;
+      return detail ? main + '\n' + detail : main;
+    }
+
+    btnSuggest.addEventListener('click', async () => {
+      state.theme = getTheme();
+      showError(themeError, '');
+      btnSuggest.disabled = true;
+      try {
+        const res = await fetch('/api/suggest-character', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: state.theme })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(themeError, errorMessage(data) || 'Could not suggest character.');
+          return;
+        }
+        charName.value = data.name || 'Hero';
+        charPersonality.value = data.personality || '';
+        stepCharacter.classList.remove('hidden');
+      } catch (e) {
+        showError(themeError, 'Network error. Try again.');
+      } finally {
+        btnSuggest.disabled = false;
+      }
+    });
+
+    btnStart.addEventListener('click', async () => {
+      state.characterName = charName.value.trim() || 'Hero';
+      state.characterPersonality = charPersonality.value.trim();
+      showError(charError, '');
+      btnStart.disabled = true;
+      try {
+        const res = await fetch('/api/start-story', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            theme: state.theme,
+            characterName: state.characterName,
+            characterPersonality: state.characterPersonality
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(charError, errorMessage(data) || 'Could not start story.');
+          return;
+        }
+        state.storySoFar = data.opening || '';
+        storyEl.textContent = state.storySoFar;
+        stepStory.classList.remove('hidden');
+        actionInput.value = '';
+        actionInput.focus();
+      } catch (e) {
+        showError(charError, 'Network error. Try again.');
+      } finally {
+        btnStart.disabled = false;
+      }
+    });
+
+    btnAction.addEventListener('click', async () => {
+      const action = actionInput.value.trim();
+      if (!action) return;
+      showError(storyError, '');
+      btnAction.disabled = true;
+      try {
+        const res = await fetch('/api/continue-story', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            theme: state.theme,
+            characterName: state.characterName,
+            characterPersonality: state.characterPersonality,
+            storySoFar: state.storySoFar,
+            userAction: action
+          })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(storyError, errorMessage(data) || 'Could not continue.');
+          return;
+        }
+        const segment = data.segment || '';
+        state.storySoFar = state.storySoFar + '\n\n' + segment;
+        storyEl.textContent = state.storySoFar;
+        actionInput.value = '';
+        actionInput.focus();
+      } catch (e) {
+        showError(storyError, 'Network error. Try again.');
+      } finally {
+        btnAction.disabled = false;
+      }
+    });
+
+    actionInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') btnAction.click();
+    });
+
+    btnNewGame.addEventListener('click', () => {
+      state = { theme: getTheme(), characterName: '', characterPersonality: '', storySoFar: '' };
+      stepCharacter.classList.add('hidden');
+      stepStory.classList.add('hidden');
+      storyEl.textContent = '';
+      showError(themeError, '');
+      showError(charError, '');
+      showError(storyError, '');
+    });
+  </script>
+</body>
+</html>
